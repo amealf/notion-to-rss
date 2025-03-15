@@ -1,0 +1,38 @@
+name: Update RSS
+
+on:
+  # 方式1：定时触发（例如：每天UTC时间0点）
+  schedule:
+    - cron: '0 0 * * *'
+  # 方式2：手动触发
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: pip install requests
+
+      - name: Run RSS Generation Script
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          DATABASE_ID: ${{ secrets.DATABASE_ID }}
+        run: python scripts/generate_rss.py
+
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "your_email@example.com"
+          git config --local user.name "Your Name"
+          git add public/rss.xml
+          git commit -m "Auto update RSS"
+          git push
+        continue-on-error: true
