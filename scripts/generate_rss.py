@@ -168,12 +168,12 @@ def generate_rss(items):
         ET.SubElement(item_elem, "link").text = "https://www.notion.so/" + page_id.replace("-", "")
         
         # 使用 <![CDATA[...]]> 包裹 HTML 内容，防止 HTML 被转义
-        description_elem = ET.SubElement(item_elem, "description")
-        description_elem.text = f"<![CDATA[{page_html}]]>"
+        # description_elem = ET.SubElement(item_elem, "description")
+        # description_elem.text = f"<![CDATA[{page_html}]]>"
         
         # 同时输出 <content:encoded> 标签
         content_elem = ET.SubElement(item_elem, "{http://purl.org/rss/1.0/modules/content/}encoded")
-        content_elem.text = f"<![CDATA[{page_html}]]>"
+        content_elem.text = page_html
         
         # 设置发布日期（此处用当前系统时间，格式符合 RFC-822）
         pub_date = datetime.datetime.now().strftime("%a, %d %b %Y %H:%M:%S GMT")
