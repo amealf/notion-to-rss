@@ -120,7 +120,7 @@ def generate_rss(items):
     遍历 Notion 数据库条目，为每个条目获取页面块内容 (HTML)，
     然后生成 RSS 的 <item> 标签。
 
-    - <description>：仅放简短文本(不使用 CDATA)，避免Inoreader显示 "CDATA["
+    - <description>：仅放简短文本(不使用 CDATA)，避免Inoreader显示 "CDATA[" 
     - <content:encoded>：使用<![CDATA[...]]> 包裹完整富文本，让阅读器渲染HTML
     """
     # 在根节点上添加 content 命名空间
@@ -154,7 +154,6 @@ def generate_rss(items):
         ET.SubElement(item_elem, "link").text = notion_link
 
         # (1) <description>：只放简短文本，避免显示 "CDATA["
-        # 你可以根据需要生成摘要，这里简单用标题
         description_elem = ET.SubElement(item_elem, "description")
         description_elem.text = f"这是简要描述：{title_text}"
 
@@ -166,8 +165,9 @@ def generate_rss(items):
         pub_date = datetime.datetime.now().strftime("%a, %d %b %Y %H:%M:%S GMT")
         ET.SubElement(item_elem, "pubDate").text = pub_date
 
-    # 转换为XML字符串
+    # 转换为XML字符串，并修正CDATA转义问题
     rss_xml = ET.tostring(rss, encoding="utf-8", method="xml").decode("utf-8")
+    rss_xml = rss_xml.replace("&lt;![CDATA[", "<![CDATA[").replace("]]&gt;", "]]>")
     return rss_xml
 
 # ================================
