@@ -160,7 +160,7 @@ def generate_rss(items):
 
         # (2) <content:encoded>：用 CDATA 包裹完整HTML
         content_elem = ET.SubElement(item_elem, "{http://purl.org/rss/1.0/modules/content/}encoded")
-        content_elem.text = f"{page_html}"
+        content_elem.text = f"CDATA[{page_html}]]>"
 
         # pubDate
         pub_date = datetime.datetime.now().strftime("%a, %d %b %Y %H:%M:%S GMT")
