@@ -6,8 +6,8 @@ import xml.etree.ElementTree as ET
 # ================================
 # 1. 配置 Notion API 参数
 # ================================
-NOTION_TOKEN = os.getenv("NOTION_TOKEN")        # 从环境变量获取 Notion 集成令牌 (Notion Integration Token)
-DATABASE_ID = os.getenv("DATABASE_ID")          # 从环境变量获取数据库 ID (Database ID)
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")        # 从环境变量获取 Notion 集成令牌
+DATABASE_ID = os.getenv("DATABASE_ID")          # 从环境变量获取数据库 ID
 
 NOTION_API_URL = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
 HEADERS = {
@@ -69,19 +69,19 @@ def convert_blocks_to_html(blocks):
                 annotations = text_item.get("annotations", {})
                 # 简单加粗、斜体
                 if annotations.get("bold"):
-                    text_content = f"<strong>{text_content}</strong>"
+                    text_content = f"<strong>{text_content}strong>"
                 if annotations.get("italic"):
-                    text_content = f"<em>{text_content}</em>"
+                    text_content = f"<em>{text_content}em>"
                 # 链接
                 if text_item.get("text", {}).get("link"):
                     link_url = text_item["text"]["link"].get("url", "#")
-                    text_content = f'<a href="{link_url}">{text_content}</a>'
+                    text_content = f'<a href="{link_url}">{text_content}a>'
                 paragraph_text += text_content
-            html_fragments.append(f"<p>{paragraph_text}</p>")
+            html_fragments.append(f"<p>{paragraph_text}p>")
 
         elif block_type == "heading_1":
             heading_text = "".join([t.get("plain_text", "") for t in block["heading_1"]["rich_text"]])
-            html_fragments.append(f"<h1>{heading_text}</h1>")
+            html_fragments.append(f"<h1>{heading_text}h1>")
 
         elif block_type == "file":
             file_info = block["file"]
@@ -92,7 +92,7 @@ def convert_blocks_to_html(blocks):
             elif "file" in file_info:
                 file_url = file_info["file"].get("url", "")
             file_name = block.get("name", "Download File")
-            html_fragments.append(f'<p><a href="{file_url}" download>{file_name}</a></p>')
+            html_fragments.append(f'<p><a href="{file_url}" download>{file_name}a>p>')
 
         elif block_type == "image":
             image_data = block["image"]
@@ -105,7 +105,7 @@ def convert_blocks_to_html(blocks):
                 caption_text = " ".join([c["plain_text"] for c in image_data["caption"]])
             img_html = f'<img src="{image_url}" alt="{caption_text}" />'
             if caption_text:
-                img_html += f'<p><em>{caption_text}</em></p>'
+                img_html += f'<p><em>{caption_text}em>p>'
             html_fragments.append(img_html)
 
         # 你可以继续扩展其他块类型: heading_2, bulleted_list_item, to_do, embed, video, 等等
@@ -121,7 +121,7 @@ def generate_rss(items):
     然后生成 RSS 的 <item> 标签。
 
     - <description>：仅放简短文本(不使用 CDATA)，避免Inoreader显示 "CDATA["
-    - <content:encoded>：使用<![CDATA[...]]> 包裹完整富文本，让阅读器渲染HTML
+    - <content:encoded>：使用CDATA[...]]> 包裹完整富文本，让阅读器渲染HTML
     """
     # 在根节点上添加 content 命名空间
     rss = ET.Element("rss", version="2.0", attrib={"xmlns:content": "http://purl.org/rss/1.0/modules/content/"})
@@ -144,8 +144,6 @@ def generate_rss(items):
         # 获取页面块并转换为富文本HTML
         blocks = get_page_blocks(page_id)
         page_html = convert_blocks_to_html(blocks)
-        # 修复 page_html 中的 "]]>" 序列，避免在 CDATA 中产生非法字符
-        safe_page_html = page_html.replace("]]>", "]]]]><![CDATA[>")
 
         # 创建 <item>
         item_elem = ET.SubElement(channel, "item")
@@ -156,12 +154,13 @@ def generate_rss(items):
         ET.SubElement(item_elem, "link").text = notion_link
 
         # (1) <description>：只放简短文本，避免显示 "CDATA["
+        # 你可以根据需要生成摘要，这里简单用标题
         description_elem = ET.SubElement(item_elem, "description")
         description_elem.text = f"这是简要描述：{title_text}"
 
         # (2) <content:encoded>：用 CDATA 包裹完整HTML
         content_elem = ET.SubElement(item_elem, "{http://purl.org/rss/1.0/modules/content/}encoded")
-        content_elem.text = f"<![CDATA[{safe_page_html}]]>"
+        content_elem.text = f"CDATA[{page_html}]]>"
 
         # pubDate
         pub_date = datetime.datetime.now().strftime("%a, %d %b %Y %H:%M:%S GMT")
@@ -169,8 +168,6 @@ def generate_rss(items):
 
     # 转换为XML字符串
     rss_xml = ET.tostring(rss, encoding="utf-8", method="xml").decode("utf-8")
-    # 修复 ElementTree 将 CDATA 标记转义的问题
-    rss_xml = rss_xml.replace("&lt;![CDATA[", "<![CDATA[").replace("]]&gt;", "]]>")
     return rss_xml
 
 # ================================
