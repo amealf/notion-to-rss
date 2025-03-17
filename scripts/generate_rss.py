@@ -11,6 +11,7 @@ DATABASE_ID = os.getenv("DATABASE_ID")          # 从环境变量获取数据库
 
 # Notion 数据库查询 URL
 NOTION_API_URL = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
+# HTTP 请求头，必须包含 Authorization、Notion-Version、Content-Type
 HEADERS = {
     "Authorization": f"Bearer {NOTION_TOKEN}",
     "Notion-Version": "2022-06-28",
@@ -18,12 +19,12 @@ HEADERS = {
 }
 
 # ================================
-# 2. 查询 Notion 数据库（获取所有条目）
+# 2. 查询 Notion 数据库中的所有记录
 # ================================
 def query_notion_database():
     """
-    查询 Notion 数据库中的所有条目，不进行额外过滤（这样即使 URL、Type、Publish Date、Status 为空也会返回）。
-    若需要过滤可修改 data 参数。
+    查询 Notion 数据库中的所有条目，不进行额外的过滤。
+    这样即使某些字段为空也会被返回。
     """
     data = {
         "page_size": 100
@@ -31,7 +32,7 @@ def query_notion_database():
     response = requests.post(NOTION_API_URL, headers=HEADERS, json=data)
     response.raise_for_status()
     data_json = response.json()
-    # 可调试：打印返回条目数
+    # 调试：可以打印返回条目的数量
     # print("Number of items returned:", len(data_json["results"]))
     return data_json["results"]
 
@@ -41,7 +42,7 @@ def query_notion_database():
 def get_page_blocks(page_id):
     """
     根据页面 ID，通过 Notion API 获取该页面的所有块内容。
-    调用 /v1/blocks/{block_id}/children 接口。
+    使用接口 /v1/blocks/{block_id}/children 获取页面下的块。
     """
     url = f"https://api.notion.com/v1/blocks/{page_id}/children"
     response = requests.get(url, headers=HEADERS)
@@ -56,33 +57,36 @@ def convert_blocks_to_html(blocks):
     """
     遍历 Notion 页面块，将不同类型的块转换为 HTML 格式。
     支持：
-      - paragraph：段落文本（处理加粗、斜体、链接）
-      - heading_1：标题1
-      - heading_2：标题2
-      - file：文件块（例如 PDF），输出下载链接
-    其他类型可根据需要扩展。
+      - paragraph：段落文本（支持加粗、斜体、链接）
+      - heading_1：标题 1
+      - heading_2：标题 2
+      - file：文件块（例如 PDF），生成下载链接
+      - image：图片块，生成 <img> 标签显示图片
+    其他类型可根据需求继续扩展。
     """
     html_fragments = []
     for block in blocks:
         block_type = block.get("type")
+        
         # 处理段落文本
         if block_type == "paragraph":
             paragraph_text = ""
             for text_item in block["paragraph"]["rich_text"]:
                 text_content = text_item.get("plain_text", "")
                 annotations = text_item.get("annotations", {})
-                # 添加简单样式：加粗、斜体
+                # 处理加粗和斜体
                 if annotations.get("bold"):
                     text_content = f"<strong>{text_content}</strong>"
                 if annotations.get("italic"):
                     text_content = f"<em>{text_content}</em>"
                 # 如果有链接则转换为 <a> 标签
-                if text_item.get("text", {}).get("link"):
-                    link_url = text_item["text"]["link"].get("url", "#")
+                link_info = text_item.get("text", {}).get("link")
+                if link_info:
+                    link_url = link_info.get("url", "#")
                     text_content = f'<a href="{link_url}">{text_content}</a>'
                 paragraph_text += text_content
             html_fragments.append(f"<p>{paragraph_text}</p>")
-
+        
         # 处理标题 1
         elif block_type == "heading_1":
             heading_text = "".join([t.get("plain_text", "") for t in block["heading_1"]["rich_text"]])
@@ -93,20 +97,30 @@ def convert_blocks_to_html(blocks):
             heading_text = "".join([t.get("plain_text", "") for t in block["heading_2"]["rich_text"]])
             html_fragments.append(f"<h2>{heading_text}</h2>")
         
-        # 处理文件块（例如 PDF 文件）
+        # 处理文件块（例如 PDF）
         elif block_type == "file":
             file_info = block["file"]
             file_url = ""
-            # 判断文件是外部链接还是 Notion 内部上传
+            # 判断文件类型：外部链接或 Notion 内部上传
             if "external" in file_info:
                 file_url = file_info["external"].get("url", "")
             elif "file" in file_info:
                 file_url = file_info["file"].get("url", "")
-            # 获取文件名称，若有的话
             file_name = block.get("name", "Download File")
             html_fragments.append(f'<p><a href="{file_url}" download>{file_name}</a></p>')
         
-        # 可以扩展处理其他块类型，例如 bulleted_list_item, to_do 等
+        # 处理图片块
+        elif block_type == "image":
+            image_data = block["image"]
+            image_url = ""
+            if image_data["type"] == "external":
+                image_url = image_data["external"].get("url", "")
+            elif image_data["type"] == "file":
+                image_url = image_data["file"].get("url", "")
+            if image_url:
+                html_fragments.append(f'<p><img src="{image_url}" alt="Image"/></p>')
+        
+        # 可扩展其他块类型，如列表、待办事项等
         
     return "\n".join(html_fragments)
 
@@ -115,17 +129,16 @@ def convert_blocks_to_html(blocks):
 # ================================
 def generate_rss(items):
     """
-    遍历 Notion 数据库条目，为每个条目调用 get_page_blocks 和 convert_blocks_to_html 获取富文本内容，
-    并生成 RSS 的 <item> 标签。
-    
+    遍历 Notion 数据库条目，为每个条目调用 get_page_blocks 和 convert_blocks_to_html
+    获取富文本内容，并生成 RSS 的 <item> 标签。
+
     每个 <item> 包括：
-      - <title>：使用 Notion 的标题属性（请确保数据库中标题列名称为 "Title"，否则修改此处）
-      - <link>：可自定义，例如 Notion 页面链接（这里示例拼接 Notion 页面 URL）
-      - <description>：使用 <![CDATA[...]]> 包裹生成的 HTML 内容
-      - <content:encoded>：同样输出 HTML（需要添加命名空间）
-      - <pubDate>：发布时间（使用当前系统时间，可根据需要改为 Notion 中的日期）
+      - <title>：使用 Notion 的标题属性（此处默认列名为 "Title"）
+      - <link>：构造一个示例链接，可修改为实际 Notion 页面链接
+      - <description> 和 <content:encoded>：输出 HTML 格式的页面内容，使用 <![CDATA[...]]> 包裹，确保 HTML 不被转义
+      - <pubDate>：发布时间，使用当前系统时间（也可以改为 Notion 中的日期）
     """
-    # 设置 RSS 根节点，并添加 content 命名空间
+    # 创建 RSS 根节点，并添加 content 命名空间，用于 <content:encoded>
     rss = ET.Element("rss", version="2.0", attrib={"xmlns:content": "http://purl.org/rss/1.0/modules/content/"})
     channel = ET.SubElement(rss, "channel")
     ET.SubElement(channel, "title").text = "Daily Reading"
@@ -134,32 +147,35 @@ def generate_rss(items):
 
     for item in items:
         properties = item.get("properties", {})
-        # 获取标题（请确保 Notion 中的标题列名称为 "Title"）
+        # 获取标题（假定标题属性名称为 "Title"）
         title_text = "No Title"
         if "Title" in properties:
             title_data = properties["Title"]["title"]
             if title_data:
                 title_text = title_data[0].get("plain_text", "No Title")
         
-        # 使用 Notion 数据库条目的 id 作为页面 id
+        # 使用数据库条目的 id 作为页面 id
         page_id = item.get("id")
         
-        # 获取该页面的块内容，并转换为 HTML
+        # 获取页面块内容，并转换为 HTML
         blocks = get_page_blocks(page_id)
         page_html = convert_blocks_to_html(blocks)
 
-        # 创建 RSS <item> 标签
+        # 创建 RSS <item>
         item_elem = ET.SubElement(channel, "item")
         ET.SubElement(item_elem, "title").text = title_text
-        # 此处构造一个链接示例，可修改为 Notion 页面实际链接
+        # 示例链接：构造一个指向 Notion 页面链接的 URL（实际情况请修改）
         ET.SubElement(item_elem, "link").text = "https://www.notion.so/" + page_id.replace("-", "")
-        # 输出描述，使用 <![CDATA[...]]> 包裹 HTML 富文本内容
+        
+        # 使用 <![CDATA[...]]> 包裹 HTML 内容，防止 HTML 被转义
         description_elem = ET.SubElement(item_elem, "description")
         description_elem.text = f"<![CDATA[{page_html}]]>"
-        # 同时使用 content:encoded 输出完整内容
+        
+        # 同时输出 <content:encoded> 标签
         content_elem = ET.SubElement(item_elem, "{http://purl.org/rss/1.0/modules/content/}encoded")
         content_elem.text = f"<![CDATA[{page_html}]]>"
-        # 设置发布日期，采用 RFC-822 格式。此处用当前时间作为示例。
+        
+        # 设置发布日期（此处用当前系统时间，格式符合 RFC-822）
         pub_date = datetime.datetime.now().strftime("%a, %d %b %Y %H:%M:%S GMT")
         ET.SubElement(item_elem, "pubDate").text = pub_date
 
@@ -168,14 +184,14 @@ def generate_rss(items):
     return rss_xml
 
 # ================================
-# 6. 主函数
+# 6. 主函数：查询、生成并写入 RSS
 # ================================
 def main():
-    # 查询 Notion 数据库中的所有记录
+    # 查询 Notion 数据库中的所有条目
     items = query_notion_database()
     # 生成 RSS XML 内容
     rss_content = generate_rss(items)
-    # 将 RSS 写入到 docs/rss.xml（确保你的仓库中存在 docs 文件夹，并在 GitHub Pages 设置中选择 docs）
+    # 将 RSS 写入到 docs/rss.xml（确保 docs 文件夹存在）
     with open("docs/rss.xml", "w", encoding="utf-8") as f:
         f.write(rss_content)
     print("RSS generated and written to docs/rss.xml")
