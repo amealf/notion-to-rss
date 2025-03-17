@@ -1,7 +1,7 @@
 import os
 import requests
 import datetime
-import xml.etree.ElementTree as ET
+from lxml import etree  # pip install lxml
 
 # ================================
 # 1. 配置 Notion API 参数
@@ -108,27 +108,28 @@ def convert_blocks_to_html(blocks):
                 img_html += f'<p><em>{caption_text}</em></p>'
             html_fragments.append(img_html)
 
-        # 你可以继续扩展其他块类型: heading_2, bulleted_list_item, to_do, embed, video, 等等
+        # 其他类型可继续扩展...
 
     return "\n".join(html_fragments)
 
 # ================================
-# 5. 生成 RSS XML
+# 5. 生成 RSS XML（使用 lxml 构造 CDATA 节点）
 # ================================
 def generate_rss(items):
     """
     遍历 Notion 数据库条目，为每个条目获取页面块内容 (HTML)，
     然后生成 RSS 的 <item> 标签。
 
-    - <description>：仅放简短文本(不使用 CDATA)，避免Inoreader显示 "CDATA[" 
-    - <content:encoded>：使用<![CDATA[...]]> 包裹完整富文本，让阅读器渲染HTML
+    - <description>：仅放简短文本，不使用 CDATA，避免 Inoreader 显示多余字符
+    - <content:encoded>：使用 CDATA 包裹完整富文本，让阅读器渲染 HTML
     """
-    # 在根节点上添加 content 命名空间
-    rss = ET.Element("rss", version="2.0", attrib={"xmlns:content": "http://purl.org/rss/1.0/modules/content/"})
-    channel = ET.SubElement(rss, "channel")
-    ET.SubElement(channel, "title").text = "Daily Reading"
-    ET.SubElement(channel, "link").text = "https://yourusername.github.io/notion-to-rss"
-    ET.SubElement(channel, "description").text = "Generated from Notion."
+    # 定义 content 命名空间
+    NSMAP = {"content": "http://purl.org/rss/1.0/modules/content/"}
+    rss = etree.Element("rss", version="2.0", nsmap=NSMAP)
+    channel = etree.SubElement(rss, "channel")
+    etree.SubElement(channel, "title").text = "Daily Reading"
+    etree.SubElement(channel, "link").text = "https://yourusername.github.io/notion-to-rss"
+    etree.SubElement(channel, "description").text = "Generated from Notion."
 
     for item in items:
         properties = item.get("properties", {})
@@ -140,34 +141,32 @@ def generate_rss(items):
             title_data = properties["Title"]["title"]
             if title_data:
                 title_text = title_data[0].get("plain_text", "No Title")
-
-        # 获取页面块并转换为富文本HTML
+        
+        # 获取页面块并转换为富文本 HTML
         blocks = get_page_blocks(page_id)
         page_html = convert_blocks_to_html(blocks)
 
         # 创建 <item>
-        item_elem = ET.SubElement(channel, "item")
-        ET.SubElement(item_elem, "title").text = title_text
-
-        # 构造链接(示例)，可改为你想要的链接
+        item_elem = etree.SubElement(channel, "item")
+        etree.SubElement(item_elem, "title").text = title_text
+        # 构造链接（示例），可改为你想要的链接
         notion_link = "https://www.notion.so/" + page_id.replace("-", "")
-        ET.SubElement(item_elem, "link").text = notion_link
+        etree.SubElement(item_elem, "link").text = notion_link
 
-        # (1) <description>：只放简短文本，避免显示 "CDATA["
-        description_elem = ET.SubElement(item_elem, "description")
-        description_elem.text = f"这是简要描述：{title_text}"
+        # <description>：简短描述
+        desc_elem = etree.SubElement(item_elem, "description")
+        desc_elem.text = f"这是简要描述：{title_text}"
 
-        # (2) <content:encoded>：用 CDATA 包裹完整HTML
-        content_elem = ET.SubElement(item_elem, "{http://purl.org/rss/1.0/modules/content/}encoded")
-        content_elem.text = f"<![CDATA[{page_html}]]>"
+        # <content:encoded>：用 CDATA 包裹完整 HTML
+        content_elem = etree.SubElement(item_elem, "{http://purl.org/rss/1.0/modules/content/}encoded")
+        content_elem.text = etree.CDATA(page_html)
 
         # pubDate
         pub_date = datetime.datetime.now().strftime("%a, %d %b %Y %H:%M:%S GMT")
-        ET.SubElement(item_elem, "pubDate").text = pub_date
+        etree.SubElement(item_elem, "pubDate").text = pub_date
 
-    # 转换为XML字符串，并修正CDATA转义问题
-    rss_xml = ET.tostring(rss, encoding="utf-8", method="xml").decode("utf-8")
-    rss_xml = rss_xml.replace("&lt;![CDATA[", "<![CDATA[").replace("]]&gt;", "]]>")
+    # 生成格式化后的 XML 字符串
+    rss_xml = etree.tostring(rss, encoding="utf-8", xml_declaration=True, pretty_print=True).decode("utf-8")
     return rss_xml
 
 # ================================
@@ -176,7 +175,7 @@ def generate_rss(items):
 def main():
     # 1) 获取数据库条目
     items = query_notion_database()
-    # 2) 生成RSS
+    # 2) 生成 RSS
     rss_content = generate_rss(items)
     # 3) 写入 docs/rss.xml
     with open("docs/rss.xml", "w", encoding="utf-8") as f:
