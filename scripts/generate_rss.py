@@ -181,6 +181,8 @@ def generate_rss(items):
 
     # 将整个 XML 树转换为字符串
     rss_xml = ET.tostring(rss, encoding="utf-8", method="xml").decode("utf-8")
+    # 新增：修复 ElementTree 将 CDATA 标记转义的问题
+    rss_xml = rss_xml.replace("&lt;![CDATA[", "CDATA[").replace("]]&gt;", "]]>")
     return rss_xml
 
 # ================================
