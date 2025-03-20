@@ -4,14 +4,14 @@ import datetime
 import xml.etree.ElementTree as ET
 
 # ================================
-# 1. 配置 Notion API 参数
+# 1. 配置 Notion API 参数 (API parameters)
 # ================================
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")        # 从环境变量获取 Notion 集成令牌
 DATABASE_ID = os.getenv("DATABASE_ID")          # 从环境变量获取数据库 ID
 
-# Notion 数据库查询 URL
+# Notion 数据库查询 URL (URL for querying the Notion database)
 NOTION_API_URL = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
-# HTTP 请求头，必须包含 Authorization、Notion-Version、Content-Type
+# HTTP 请求头 (HTTP headers)，必须包含 Authorization、Notion-Version、Content-Type
 HEADERS = {
     "Authorization": f"Bearer {NOTION_TOKEN}",
     "Notion-Version": "2022-06-28",
@@ -19,7 +19,7 @@ HEADERS = {
 }
 
 # ================================
-# 2. 查询 Notion 数据库中的所有记录
+# 2. 查询 Notion 数据库中的所有记录 (Query all records in the Notion database)
 # ================================
 def query_notion_database():
     """
@@ -37,7 +37,7 @@ def query_notion_database():
     return data_json["results"]
 
 # ================================
-# 3. 获取 Notion 页面块内容
+# 3. 获取 Notion 页面块内容 (Get page blocks)
 # ================================
 def get_page_blocks(page_id):
     """
@@ -51,7 +51,7 @@ def get_page_blocks(page_id):
     return data.get("results", [])
 
 # ================================
-# 4. 将 Notion 块转换为 HTML
+# 4. 将 Notion 块转换为 HTML (Convert blocks to HTML)
 # ================================
 def convert_blocks_to_html(blocks):
     """
@@ -68,18 +68,18 @@ def convert_blocks_to_html(blocks):
     for block in blocks:
         block_type = block.get("type")
         
-        # 处理段落文本
+        # 处理段落文本 (paragraph)
         if block_type == "paragraph":
             paragraph_text = ""
             for text_item in block["paragraph"]["rich_text"]:
                 text_content = text_item.get("plain_text", "")
                 annotations = text_item.get("annotations", {})
-                # 处理加粗和斜体
+                # 处理加粗和斜体 (bold and italic)
                 if annotations.get("bold"):
                     text_content = f"<strong>{text_content}</strong>"
                 if annotations.get("italic"):
                     text_content = f"<em>{text_content}</em>"
-                # 如果有链接则转换为 <a> 标签
+                # 如果有链接则转换为 <a> 标签 (link)
                 link_info = text_item.get("text", {}).get("link")
                 if link_info:
                     link_url = link_info.get("url", "#")
@@ -87,17 +87,17 @@ def convert_blocks_to_html(blocks):
                 paragraph_text += text_content
             html_fragments.append(f"<p>{paragraph_text}</p>")
         
-        # 处理标题 1
+        # 处理标题 1 (heading_1)
         elif block_type == "heading_1":
             heading_text = "".join([t.get("plain_text", "") for t in block["heading_1"]["rich_text"]])
             html_fragments.append(f"<h1>{heading_text}</h1>")
         
-        # 处理标题 2
+        # 处理标题 2 (heading_2)
         elif block_type == "heading_2":
             heading_text = "".join([t.get("plain_text", "") for t in block["heading_2"]["rich_text"]])
             html_fragments.append(f"<h2>{heading_text}</h2>")
         
-        # 处理文件块（例如 PDF）
+        # 处理文件块 (file block，例如 PDF)
         elif block_type == "file":
             file_info = block["file"]
             file_url = ""
@@ -109,7 +109,7 @@ def convert_blocks_to_html(blocks):
             file_name = block.get("name", "Download File")
             html_fragments.append(f'<p><a href="{file_url}" download>{file_name}</a></p>')
         
-        # 处理图片块
+        # 处理图片块 (image block)
         elif block_type == "image":
             image_data = block["image"]
             image_url = ""
@@ -125,7 +125,27 @@ def convert_blocks_to_html(blocks):
     return "\n".join(html_fragments)
 
 # ================================
-# 5. 生成 RSS XML
+# 5. 更新 Notion 页面属性 (Update Notion page properties)
+# ================================
+def update_notion_page(page_id):
+    """
+    使用 Notion API 更新页面属性，将 Status 修改为 Published，
+    同时将 Publish Date 更新为当前日期（ISO 格式）。
+    """
+    update_url = f"https://api.notion.com/v1/pages/{page_id}"
+    today_date = datetime.date.today().isoformat()  # 当前日期，如 "2025-03-18"
+    update_data = {
+        "properties": {
+            "Status": {"select": {"name": "Published"}},
+            "Publish Date": {"date": {"start": today_date}}
+        }
+    }
+    response = requests.patch(update_url, headers=HEADERS, json=update_data)
+    response.raise_for_status()
+    return response.json()
+
+# ================================
+# 6. 生成 RSS XML (Generate RSS XML)
 # ================================
 def generate_rss(items):
     """
@@ -157,6 +177,11 @@ def generate_rss(items):
         # 使用数据库条目的 id 作为页面 id
         page_id = item.get("id")
         
+        # -------------------------------
+        # 更新已发布的笔记 (Update published note)
+        # -------------------------------
+        update_notion_page(page_id)
+        
         # 获取页面块内容，并转换为 HTML
         blocks = get_page_blocks(page_id)
         page_html = convert_blocks_to_html(blocks)
@@ -166,10 +191,6 @@ def generate_rss(items):
         ET.SubElement(item_elem, "title").text = title_text
         # 示例链接：构造一个指向 Notion 页面链接的 URL（实际情况请修改）
         ET.SubElement(item_elem, "link").text = "https://www.notion.so/" + page_id.replace("-", "")
-        
-        # 使用 <![CDATA[...]]> 包裹 HTML 内容，防止 HTML 被转义
-        # description_elem = ET.SubElement(item_elem, "description")
-        # description_elem.text = f"<![CDATA[{page_html}]]>"
         
         # 同时输出 <content:encoded> 标签
         content_elem = ET.SubElement(item_elem, "{http://purl.org/rss/1.0/modules/content/}encoded")
@@ -184,7 +205,7 @@ def generate_rss(items):
     return rss_xml
 
 # ================================
-# 6. 主函数：查询、生成并写入 RSS
+# 7. 主函数：查询、生成并写入 RSS (Main function)
 # ================================
 def main():
     # 查询 Notion 数据库中的所有条目
