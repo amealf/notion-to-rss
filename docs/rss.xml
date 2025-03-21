@@ -1,8 +1,1 @@
-<rss xmlns:ns0="http://purl.org/rss/1.0/modules/content/" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>Daily Reading</title><link>https://yourusername.github.io/notion-to-rss</link><description>Generated from Notion.</description><item><title>test url</title><link>https://www.notion.so/1b9d27b98c7f808690abfa67ed62a67e</link><ns0:encoded>&lt;p&gt;source: &lt;a href="https://www.notion.so/1b9d27b98c7f808690abfa67ed62a67e"&gt;https://www.notion.so/1b9d27b98c7f808690abfa67ed62a67e&lt;/a&gt;&lt;/p&gt;&lt;p&gt;&lt;/p&gt;&lt;p&gt;&lt;/p&gt;
-&lt;p&gt;test test&lt;/p&gt;
-&lt;p&gt;&lt;/p&gt;
-&lt;h1&gt;ABC&lt;/h1&gt;
-&lt;p&gt;&lt;/p&gt;
-&lt;p&gt;&lt;/p&gt;
-&lt;p&gt;abcd&lt;/p&gt;
-&lt;p&gt;&lt;/p&gt;</ns0:encoded><pubDate>Fri, 21 Mar 2025 22:28:56 GMT</pubDate></item></channel></rss>
+<rss xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>Daily Reading</title><link>https://yourusername.github.io/notion-to-rss</link><description>Generated from Notion.</description></channel></rss>
