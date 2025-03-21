@@ -139,7 +139,9 @@ def generate_rss(items):
     遍历 Notion 数据库条目，为每个未推送（Status 不为 Published）的条目：
       - 更新页面属性（将 Status 更新为 Published，设置 Publish Date）
       - 获取页面块内容，并转换为 HTML
-      - 在文章开头插入 source 链接（使用 Notion 数据库中 "url" 列的值），空一行后再接正文内容
+      - 在文章内容末尾增加空行，然后分两行输出：
+            第一行：如果存在 "url" 列的值，则显示 "URL: <url列的值>"
+            第二行：始终显示 "source: <Notion 页面链接>"
       - 生成 RSS 的 <item> 标签
     """
     rss = ET.Element("rss", version="2.0", attrib={"xmlns:content": "http://purl.org/rss/1.0/modules/content/"})
@@ -166,13 +168,13 @@ def generate_rss(items):
         # 使用数据库条目的 id 作为页面 id
         page_id = item.get("id")
         
-        # 从 Notion 数据库中的 "url" 列获取链接值 (Get the URL from the "url" column)
-        source_url = None
+        # 从 Notion 数据库中的 "url" 列获取链接值 (取值为 URL column)
+        url_column_value = None
         if "url" in properties:
-            source_url = properties["url"].get("url")
-        # 如果 "url" 列为空，则回退使用 Notion 页面链接 (Fallback to Notion page URL)
-        if not source_url:
-            source_url = "https://www.notion.so/" + page_id.replace("-", "")
+            url_column_value = properties["url"].get("url")
+        
+        # 构造 Notion 页面链接
+        notion_page_url = "https://www.notion.so/" + page_id.replace("-", "")
         
         # 更新页面属性：将 Status 更新为 Published，并设置 Publish Date
         update_notion_page(page_id)
@@ -181,14 +183,19 @@ def generate_rss(items):
         blocks = get_page_blocks(page_id)
         page_html = convert_blocks_to_html(blocks)
         
-        # 在文章开头插入 source 链接和空行
-        source_html = f'<p>source: <a href="{source_url}">{source_url}</a></p><p></p>'
-        page_html = source_html + page_html
+        # 在文章内容末尾增加一空行，再分两行输出：
+        # 如果 url_column_value 存在，则输出 "URL: <url_column_value>"
+        # 始终输出 "source: <Notion 页面链接>"
+        extra_html = "<p></p>"
+        if url_column_value:
+            extra_html += f'<p>URL: <a href="{url_column_value}">{url_column_value}</a></p>'
+        extra_html += f'<p>source: <a href="{notion_page_url}">{notion_page_url}</a></p>'
+        page_html = page_html + extra_html
 
         # 创建 RSS <item>
         item_elem = ET.SubElement(channel, "item")
         ET.SubElement(item_elem, "title").text = title_text
-        ET.SubElement(item_elem, "link").text = source_url
+        ET.SubElement(item_elem, "link").text = notion_page_url
         content_elem = ET.SubElement(item_elem, "{http://purl.org/rss/1.0/modules/content/}encoded")
         content_elem.text = page_html
         pub_date = datetime.datetime.now().strftime("%a, %d %b %Y %H:%M:%S GMT")
