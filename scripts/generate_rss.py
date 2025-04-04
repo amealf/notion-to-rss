@@ -153,9 +153,9 @@ def generate_rss(items):
     for item in items:
         properties = item.get("properties", {})
 
-        # 仅推送 Status 不为 'Published' 的笔记 (Only process notes with Status != 'Published')
+        # 仅推送 Status 为 'To be published' 的笔记 
         status_select = properties.get("Status", {}).get("select")
-        if status_select and status_select.get("name") == "Published":
+        if status_select.get("name") != "To be published":
             continue
 
         # 获取标题，假定标题属性名称为 "Title"
