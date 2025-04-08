@@ -155,9 +155,11 @@ def generate_rss(items):
 
         # 仅推送 Status 为 'To be published' 的笔记 
         status_select = properties.get("Status", {}).get("select")
-        if status_select.get("name") != "To be published":
+        if status_select != None:
+            if status_select.get("name") != "To be published":
+                continue
+        else:
             continue
-
         # 获取标题，假定标题属性名称为 "Title"
         title_text = "No Title"
         if "Title" in properties:
